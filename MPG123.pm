@@ -1,17 +1,19 @@
-#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.9 2001/08/06 23:23:35 matt Exp $
+#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.14 2002/06/26 00:50:23 matt Exp $
 package POE::Component::MPG123;
-# http://lists.sf.net/pipermail/misterhouse-users/2000-February/000437.html
 
+use warnings;
 use strict;
 use Carp;
 use POE qw( Wheel::Run 
-            Wheel::ReadLine 
             Filter::Line 
             Driver::SysRW 
           );
 use vars qw($VERSION);
 
-$VERSION = '0.01';
+$VERSION = (qw($Revision: 1.14 $))[1];
+my %pid;	# keeps a list of process id's for players spawned
+my $alias;	# last used alias
+my $err;	# last error generated
 
 # mpg123 component.
 
@@ -43,26 +45,33 @@ sub spawn {
             stat       => \&stat,
             shutdown   => \&shutdown,
             quit       => \&quit,
+			vol        => \&vol,
+			xcmd       => \&xcmd,
+
             sig_child  => \&sig_child,
             force_quit => \&force_quit,
         },
-        args => [ $args{alias} ],
+        args => [ \%args ],
     );
 }
 
 sub _start { #{{{
-    my ($kernel,$heap,$interface) = @_[KERNEL,HEAP,ARG0];
-    $kernel->alias_set( 'mpg123' );
-    $heap->{interface} = $interface;
+    my ($kernel,$heap,$args) = @_[KERNEL,HEAP,ARG0];
+	my @args = split /\s+/, $args->{mpg123} if $args->{mpg123};
+
+    $kernel->alias_set('mpg123');
+    $heap->{interface} = $args->{alias};
+
     $heap->{player} = POE::Wheel::Run->new ( 
-                            Program     => [ 'mpg123', '-R', '--aggressive', '' ],
-                            Filter      => POE::Filter::Line->new( Literal => "\n" ),
-                            StdinEvent  => 'cmd_sent',
-                            StdoutEvent => 'got_output',
-                            StderrEvent => 'got_error',
-                       );
+         Program     => [ 'mpg123', '-R', '--aggressive', @args, '' ],
+         Filter      => POE::Filter::Line->new( Literal => "\n" ),
+         StdinEvent  => 'cmd_sent',
+         StdoutEvent => 'got_output',
+         StderrEvent => 'got_error',
+         );
     $kernel->sig( CHLD => 'sig_child' );
-              
+	$pid{ $heap->{interface} } = $heap->{player}->PID;
+	$alias = $heap->{interface};
 }#}}}
 
 sub _stop { #{{{
@@ -75,7 +84,7 @@ sub _stop { #{{{
 
 # To make sure stuff got flushed to mpg123.
 sub cmd_sent { #{{{
-    $_[KERNEL]->post( $_[HEAP]->{interface} => debug => "\tcommand sent" ) ;
+    $_[KERNEL]->post( $_[HEAP]->{interface} => debug => "command sent" ) ;
 }#}}}
 
 # Parse MPG123 responses, and forward them to the console in
@@ -172,13 +181,19 @@ sub got_output {  #{{{
             $kernel->post( $heap->{interface} => 'song_resumed' );
             return;
         }
+        elsif ($1 == 3) {
+            $kernel->post( $heap->{interface} => 'song_ended' );
+            return;
+        }
     }
 
-    $_[KERNEL]->post( $heap->{interface} => debug => "\t$_[ARG0]" );
+    $_[KERNEL]->post( $heap->{interface} => debug => $_[ARG0] );
 }#}}}
 
 sub got_error { #{{{
-    $_[KERNEL]->post( $_[HEAP]->{interface} => error => $_[ARG0] );
+	my ($kernel, $heap) = @_[KERNEL, HEAP];
+	$err = $_[ARG0];
+    $kernel->post( $heap->{interface}, error => $err );
 }#}}}
 
 sub play { #{{{
@@ -201,6 +216,24 @@ sub stat { #{{{
     $heap->{player}->put( "STAT" );   
 }#}}}
 
+sub vol { #{{{
+    my ($heap, $vol) = @_[HEAP, ARG0];
+	$vol ||= 0;
+	return unless $vol =~ /^\d+$/;
+    $heap->{player}->put( "VOL $vol" );   
+}#}}}
+
+sub xcmd { #{{{
+    my ($heap, $cmd) = @_[HEAP, ARG0];
+	return unless $cmd;
+    $heap->{player}->put( $cmd );   
+}#}}}
+
+sub pid { #{{{
+	my $alias = shift || $alias;
+    return $pid{$alias};
+}#}}}
+
 sub shutdown { #{{{
     my ($kernel,$heap) = @_[KERNEL,HEAP];
     $kernel->alias_remove( 'mpg123' );
@@ -212,8 +245,7 @@ sub sig_child {#{{{
     my ($kernel, $heap, $pid, $status) = @_[KERNEL, HEAP, ARG1, ARG2];
     if ($pid == $heap->{player}->PID) {
         $kernel->delay( 'force_quit' );
-        $kernel->alias_remove( 'mpg123' );
-        $kernel->post( $heap->{interface} => 'player_quit' );
+        $kernel->post( $heap->{interface}, 'player_died' => $err );
         delete $heap->{player};
     }
     return 0;
@@ -291,6 +323,18 @@ unloaded and you cannot continue from where you left off.
 
 Pause or unpause the current track.
 
+=item vol
+
+	$kernel->post( mpg123, vol => $vol );
+
+Sets the volume.  The $vol parameter should be an integer between 0 and 100 (inclusive) representing the percentage to set.  Note that this command can only be used with a patched version of mpg123 that supports the VOL command.  Use of this command in unpatched versions will result in undetermined behaviour.
+
+=item xcmd
+
+	$kernel->post( mpg123, xcmd => $cmd );
+
+This message allows posting to the player any command not currently built into this component.  Use at your own risk!
+ 
 =item quit 
 
     $kernel->post( mpg123 => 'quit' );
@@ -337,6 +381,10 @@ Fired when a song becomes paused. No args.
 
 Fired when a song resumes playback. No args.
 
+=item song_ended
+
+Fired when playing a song has finished.
+
 =item player_quit
 
 Fired when mpg123 goes away, either as the result of something stupid 
@@ -353,19 +401,21 @@ production use.
 
 Matt Cashner (eek+poe@eekeek.org)
 
+Erick Calder (ekkis@cpan.org)
+
 Rocco Caputo (troc@netrus.net)
 
 =head1 DATE
 
-$Date: 2001/08/06 23:23:35 $
+$Date: 2002/06/26 00:50:23 $
 
 =head1 VERSION
 
-0.01
+$Revision: 1.14 $
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2000-2001 Matt Cashner and Rocco Caputo. This product is 
+Copyright (c) 2000-2002 Matt Cashner, Erick Calder, and Rocco Caputo. This product is 
 distributed under the MIT License. A copy of this license was included 
 in a file called LICENSE. If for some reason, this file was not 
 included, please see 

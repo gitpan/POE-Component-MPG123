@@ -298,6 +298,7 @@ POE::Session->create
       debug   => sub { },
       _child  => sub { },
       _signal => sub { 0 },
+      player_died => sub { },
     },
   );
 

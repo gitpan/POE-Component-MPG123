@@ -21,13 +21,12 @@ DESCRIPTION
         be posted. This defaults to console.
 
   Available events
-
     All events are posted to a session named "mpg123".
 
     play
         $kernel->post( mpg123 => play => $filename );
 
-    Load and play the mp3 found at "$filename". The parameter must either be
+    Load and play the mp3 found at $filename. The parameter must either be
     an existing mp3 file or the full url to an mp3 stream.
 
     stop
@@ -42,13 +41,27 @@ DESCRIPTION
 
     Pause or unpause the current track.
 
+    vol
+            $kernel->post( mpg123, vol => $vol );
+
+    Sets the volume. The $vol parameter should be an integer between 0 and
+    100 (inclusive) representing the percentage to set. Note that this
+    command can only be used with a patched version of mpg123 that supports
+    the VOL command. Use of this command in unpatched versions will result
+    in undetermined behaviour.
+
+    xcmd
+            $kernel->post( mpg123, xcmd => $cmd );
+
+    This message allows posting to the player any command not currently
+    built into this component. Use at your own risk!
+
     quit
         $kernel->post( mpg123 => 'quit' );
 
     Stop playing the current track and shut down the mpg123 process.
 
   Callbacks
-
     As noted above, all callbacks are either posted to the session alias
     given to "spawn()" or "console".
 
@@ -80,6 +93,9 @@ DESCRIPTION
     song_resumed
     Fired when a song resumes playback. No args.
 
+    song_ended
+    Fired when playing a song has finished.
+
     player_quit
     Fired when mpg123 goes away, either as the result of something stupid
     happening in mpg123 itself or as a result of a "quit" event. Suggested
@@ -93,18 +109,21 @@ DESCRIPTION
 AUTHOR
     Matt Cashner (eek+poe@eekeek.org)
 
+    Erick Calder (ekkis@cpan.org)
+
     Rocco Caputo (troc@netrus.net)
 
 DATE
-    $Date: 2001/08/05 21:45:09 $
+    $Date: 2002/06/26 00:51:15 $
 
 VERSION
-    0.01
+    $Revision: 1.5 $
 
 LICENSE AND COPYRIGHT
-    Copyright (c) 2000-2001 Matt Cashner and Rocco Caputo. This product is
-    distributed under the MIT License. A copy of this license was included
-    in a file called LICENSE. If for some reason, this file was not
-    included, please see http://www.opensource.org/licenses/mit-license.html
-    to obtain a copy of this license.
+    Copyright (c) 2000-2002 Matt Cashner, Erick Calder, and Rocco Caputo.
+    This product is distributed under the MIT License. A copy of this
+    license was included in a file called LICENSE. If for some reason, this
+    file was not included, please see
+    http://www.opensource.org/licenses/mit-license.html to obtain a copy of
+    this license.
 
