@@ -1,4 +1,4 @@
-#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.15 2002/08/17 23:26:13 sungo Exp $
+#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.17 2002/08/18 16:44:04 sungo Exp $
 package POE::Component::MPG123;
 
 use warnings;
@@ -10,7 +10,7 @@ use POE qw( Wheel::Run
           );
 use vars qw($VERSION);
 
-$VERSION = (qw($Revision: 1.15 $))[1];
+$VERSION = (qw($Revision: 1.17 $))[1];
 my %pid;	# keeps a list of process id's for players spawned
 my $alias;	# last used alias
 my $err;	# last error generated
@@ -27,6 +27,8 @@ sub fixup {
 sub spawn {
     my $class = shift;
     my %args = @_;
+    check_for_mpg123();
+
     $args{alias} ||= 'console';
 
     POE::Session->create( 
@@ -266,6 +268,30 @@ sub force_quit {#{{{
     }
 }#}}}
 
+sub check_for_mpg123 {
+    my @paths = split /:/, $ENV{PATH};
+    my $count = 0;
+    foreach my $path (@paths) {
+        if(-x $path . '/mpg123') {
+            $count++;
+        }
+    }
+
+    unless($count) {
+        print <<DEATH;
+===========================================================
+FATAL ERROR DETECTED!!!
+        
+This module wraps the program mpg123, which you don't seem 
+to have. You either need to install mpg123 or make sure 
+that it is in the environment's PATH. 
+
+===========================================================
+DEATH
+        exit(1);
+    }
+}
+
 1;
 
 # Documentation #{{{
@@ -409,11 +435,11 @@ Rocco Caputo (troc@netrus.net)
 
 =head1 DATE
 
-$Date: 2002/08/17 23:26:13 $
+$Date: 2002/08/18 16:44:04 $
 
 =head1 VERSION
 
-$Revision: 1.15 $
+$Revision: 1.17 $
 
 =head1 LICENSE AND COPYRIGHT
 

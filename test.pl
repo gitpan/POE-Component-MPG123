@@ -8,9 +8,26 @@ use POE qw(Component::MPG123);
 # Cheezy test setup to eliminate a dependency on Test::More.
 
 BEGIN {
-  $| = 1;
-  print "1..11\n";
+    $| = 1;
+
+    my @paths = split /:/, $ENV{PATH};
+    my $count = 0;
+    foreach my $path (@paths) {
+        if(-x $path . '/mpg123') {
+            $count++;
+        }
+    }
+
+    unless($count) {
+        print "1..1\n";
+        print "not ok 1 - mpg123 not found in the PATH\n"; 
+        $POE::Kernel::poe_kernel->run();
+        exit(1);
+    }
+
+    print "1..11\n";
 }
+
 
 POE::Component::MPG123->spawn( alias => 'tester' );
 
