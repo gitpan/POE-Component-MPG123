@@ -1,4 +1,4 @@
-#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.14 2002/06/26 00:50:23 matt Exp $
+#$Header: /cvsroot/POE-Component-MPG123/MPG123.pm,v 1.15 2002/08/17 23:26:13 sungo Exp $
 package POE::Component::MPG123;
 
 use warnings;
@@ -10,7 +10,7 @@ use POE qw( Wheel::Run
           );
 use vars qw($VERSION);
 
-$VERSION = (qw($Revision: 1.14 $))[1];
+$VERSION = (qw($Revision: 1.15 $))[1];
 my %pid;	# keeps a list of process id's for players spawned
 my $alias;	# last used alias
 my $err;	# last error generated
@@ -50,6 +50,8 @@ sub spawn {
 
             sig_child  => \&sig_child,
             force_quit => \&force_quit,
+
+            _signal    => sub { 0 },
         },
         args => [ \%args ],
     );
@@ -64,7 +66,8 @@ sub _start { #{{{
 
     $heap->{player} = POE::Wheel::Run->new ( 
          Program     => [ 'mpg123', '-R', '--aggressive', @args, '' ],
-         Filter      => POE::Filter::Line->new( Literal => "\n" ),
+         StdioFilter  => POE::Filter::Line->new( Literal => "\n" ),
+         StderrFilter => POE::Filter::Line->new( Literal => "\n" ),
          StdinEvent  => 'cmd_sent',
          StdoutEvent => 'got_output',
          StderrEvent => 'got_error',
@@ -245,8 +248,7 @@ sub sig_child {#{{{
     my ($kernel, $heap, $pid, $status) = @_[KERNEL, HEAP, ARG1, ARG2];
     if ($pid == $heap->{player}->PID) {
         $kernel->delay( 'force_quit' );
-        $kernel->post( $heap->{interface}, 'player_died' => $err );
-        delete $heap->{player};
+        $kernel->yield("shutdown");
     }
     return 0;
 }#}}}
@@ -407,11 +409,11 @@ Rocco Caputo (troc@netrus.net)
 
 =head1 DATE
 
-$Date: 2002/06/26 00:50:23 $
+$Date: 2002/08/17 23:26:13 $
 
 =head1 VERSION
 
-$Revision: 1.14 $
+$Revision: 1.15 $
 
 =head1 LICENSE AND COPYRIGHT
 

@@ -61,6 +61,15 @@ POE::Session->create
         print "ok 11\n";
       },
 
+      ### Got an error?
+
+      error => sub {
+        die "@_[ARG0..$#_]";
+      },
+
+      song_timeout => sub { },
+      _signal => sub { return 0 },
+
       ### Status tests.
 
       # Receive status events from mpg123.  We're going to count them
